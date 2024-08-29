@@ -172,7 +172,7 @@ void colorWipe(int wait) {
 
 // Відправка в телеграм повідомлення та клавіатури.
 void success(String message) {
-  String keyboardJson = "[[\"" + String(enabled ? "⏸💡" : "▶️💡") + "\"], [\"🔆 Змінити яскравість (" + String(autoBrightness ? "🤖": String(brightness) + "%") + ")\"], [\"🔧 Оновити прошивку\"], [\"🔄 Рестарт\"]]";
+  String keyboardJson = "[[\"" + String(enabled ? "⏸💡" : "▶️💡") + "\"], [\"🔆 Змінити яскравість (" + String(autoBrightness ? "🤖": String(brightness) + "%") + ")\"], [\"🔢 Змінити режим (" + String(mode == "alarms" ? "🚨" : mode == "flag" ? "🇺🇦" : mode == "weather" ? "🌡" : mode == "flashlight" ? "🔦" + String(color == "white" ? "⚪" : color == "red" ? "🔴" : color == "orange" ? "🟠" : color == "yellow" ? "🟡" : color == "green" ? "🟢" : color == "blue" ? "🔵" : color == "purple" ? "🟣" : "❌")  : "❌") + ")\"], [\"🔧 Оновити прошивку\"], [\"🔄 Рестарт\"]]";
   bot.sendMessageWithReplyKeyboard(CHAT_ID, message, "", keyboardJson, true);
 }
 
@@ -271,9 +271,6 @@ int* getSeparateDigits (int input_digit)
 {
   static int ret[2];
 
-  //ret[0] = (input_digit >= 10) ? (input_digit >> 4) : 0; // Зсув на 4 біти (відповідає діленню на 16)
-  //ret[1] = input_digit & 0x0F;  // Маскування для отримання одиниць
-
   if (input_digit >= 10) {
     ret[0] = input_digit / 10;   // Отримуємо десятки
     ret[1] = input_digit % 10;   // Отримуємо одиниці
@@ -282,7 +279,6 @@ int* getSeparateDigits (int input_digit)
     ret[0] = 0;
     ret[1] = input_digit;
   }
-
 
   return ret;
 }
@@ -306,25 +302,6 @@ void printLocalTime(struct tm timeinfo)
 
   int* hour_a = getSeparateDigits(timeinfo.tm_hour);
 
-  /*auto hour = std::to_string(timeinfo.tm_hour);
-  std::string hour_1 = hour.substr(0,1);
-  std::string hour_2 = hour.substr(1,2);
-
-  if (timeinfo.tm_hour < 10)
-  {
-    hour_2 = hour_1;
-    hour_1 = "0";
-  } 
-
-  auto minutes = std::to_string(timeinfo.tm_min);
-  std::string minute_1 = minutes.substr(0,1);
-  std::string minute_2 = minutes.substr(1,2);
-
-  if (timeinfo.tm_min < 10)
-  {
-    minute_2 = minute_1;
-    minute_1 = "0";
-  }*/
 
   Serial.print("Hour1:");
   Serial.println(std::to_string(hour_a[0]).c_str());
@@ -345,11 +322,8 @@ void printLocalTime(struct tm timeinfo)
 // Потмім використається щоб засвітити світлодіоди
 // int led_Count - кількисть світлодіодів які треба засвітити - година або минута.
 // int range_min, int range_max - відповідно кількисть світлодіодів яки можна використати. - відповідає секциї
-int* getRandomLeds(int led_Count, int range_min, int range_max)
+int* getRandomLeds(int led_Count, int range_max)
 {
-  // Serial.print("Led count:");
-  // Serial.println(led_Count);  // Виведення числа в серійний монітор
-
   static int numbers[ARRAY_SIZE];  // Масив для зберігання випадкових чисел
   bool used[ARRAY_SIZE];    // Масив для перевірки використаних чисел
 
@@ -361,38 +335,26 @@ int* getRandomLeds(int led_Count, int range_min, int range_max)
   for (int i = 0; i < led_Count; i++) {
     int num;
     do {
-      num = random(range_min, range_max + 1);  // Генерація випадкового числа
-      Serial.print("випадкове число:");
-      Serial.println(num);
-      Serial.print("used[num]:");
-      Serial.println(used[num]);
+      num = random(0, range_max + 1);  // Генерація випадкового числа
     } while (used[num]);  // Перевірка, чи число вже було використане
 
     numbers[i] = num;
     used[num] = true;
-    Serial.println(numbers[i]);  // Виведення числа в серійний монітор
+    //Serial.println(numbers[i]);  // Виведення числа в серійний монітор
   }
   return numbers;
 }
 
 void showTixHour(int* hours_a)
 {
-  Serial.print("Встановлюємо години десятки:");
-  Serial.println(hours_a[0]);
-  setLedGroupAndColor(ledHour1, 3, getRandomLeds(hours_a[0], 0, 2), hours_a[0], strip.Color(255, 0, 0));
-  Serial.print("Встановлюємо години одиниці:");
-  Serial.println(hours_a[1]);
-  setLedGroupAndColor(ledHour2, 9, getRandomLeds(hours_a[1], 0, 8), hours_a[1], strip.Color(0, 255, 0));
+  setLedGroupAndColor(ledHour1, 3, getRandomLeds(hours_a[0], 2), hours_a[0], strip.Color(255, 0, 0));
+  setLedGroupAndColor(ledHour2, 9, getRandomLeds(hours_a[1], 8), hours_a[1], strip.Color(0, 255, 0));
 }
 
 void showTixMinutes(int* mins_a)
 {
-  Serial.print("Встановлюємо минути десятки:");
-  Serial.println(mins_a[0]);
-  setLedGroupAndColor(ledMin1, 6, getRandomLeds(mins_a[0], 0, 5), mins_a[0], strip.Color(0, 0, 255));
-  Serial.print("Встановлюємо минути одиниці:");
-  Serial.println(mins_a[1]);
-  setLedGroupAndColor(ledMin2, 9, getRandomLeds(mins_a[1], 0, 8), mins_a[1], strip.Color(255, 0, 0));
+  setLedGroupAndColor(ledMin1, 6, getRandomLeds(mins_a[0], 5), mins_a[0], strip.Color(0, 0, 255));
+  setLedGroupAndColor(ledMin2, 9, getRandomLeds(mins_a[1], 8), mins_a[1], strip.Color(255, 0, 0));
 }
 
 /*
@@ -408,14 +370,10 @@ void setLedGroupAndColor (int* legGroup, int legGroup_len, int* enableIndexes, i
   for (int i = 0; i < legGroup_len; i++) { // For each pixel in strip...
     if (linearSearch(enableIndexes, enabled_len, i) >= 0)
     {
-      Serial.print("Led enable:");
-      Serial.println(legGroup[i]);
       strip.setPixelColor(legGroup[i], ledColor);
     } 
     else 
     {
-      Serial.print("Off led :");
-      Serial.println(legGroup[i]);
       strip.setPixelColor(legGroup[i], strip.Color(0, 0, 0));  // вимикаємо світлодіод
     }
   }
