@@ -172,7 +172,8 @@ void colorWipe(int wait) {
 
 // Відправка в телеграм повідомлення та клавіатури.
 void success(String message) {
-  String keyboardJson = "[[\"" + String(enabled ? "⏸💡" : "▶️💡") + "\"], [\"🔆 Змінити яскравість (" + String(autoBrightness ? "🤖": String(brightness) + "%") + ")\"], [\"🔢 Змінити режим (" + String(mode == "alarms" ? "🚨" : mode == "flag" ? "🇺🇦" : mode == "weather" ? "🌡" : mode == "flashlight" ? "🔦" + String(color == "white" ? "⚪" : color == "red" ? "🔴" : color == "orange" ? "🟠" : color == "yellow" ? "🟡" : color == "green" ? "🟢" : color == "blue" ? "🔵" : color == "purple" ? "🟣" : "❌")  : "❌") + ")\"], [\"🔧 Оновити прошивку\"], [\"🔄 Рестарт\"]]";
+  String keyboardJson = "[[\"" + String(enabled ? "⏸💡" : "▶️💡") + "\"], [\"🔆 Змінити яскравість (" + String(autoBrightness ? "🤖": String(brightness) + "%") + ")\"], [\"🔧 Оновити прошивку\"], [\"🔄 Рестарт\"]]";
+  //[\"🔢 Змінити режим (" + String(mode == "clock" ? "🕒" : mode == "flag" ? "🇺🇦" : mode == "flashlight" ? "🔦" + String(color == "white" ? "⚪" : color == "red" ? "🔴" : color == "orange" ? "🟠" : color == "yellow" ? "🟡" : color == "green" ? "🟢" : color == "blue" ? "🔵" : color == "purple" ? "🟣" : "❌")  : "❌") + ")\"],
   bot.sendMessageWithReplyKeyboard(CHAT_ID, message, "", keyboardJson, true);
 }
 
