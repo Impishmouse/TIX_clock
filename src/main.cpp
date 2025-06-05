@@ -1,3 +1,10 @@
+/*
+
+Робочий приклад  TIX CLOCK 
+
+
+*/
+
 // =======================================
 
 #include <ArduinoJson.h> //json для аналізу інформації
@@ -19,7 +26,7 @@ char ssid[] = "StarLord";                  //"StarLord"; //Назва твоєї
 char password[] = "strongWifipwd";              //"strongWifipwd"; //Пароль від твого WiFi
 char APSsid[] = "TixClock"; //Назва точки доступу
 char APPassword[] = ""; //Пароль від точки доступу
-int brightness = 70; //Яскравість %
+int brightness = 10; //Яскравість %
 bool autoBrightness = true; //Ввімкнена/вимкнена авто яскравість
 
 #define BOTtoken "6048625903:AAEe-Sr6wOnMzcp-LaLQxU9FwALzpDqhpIU"
@@ -28,8 +35,8 @@ int botRequestDelay = 1000;
 
 const int day = 9; //Початок дня
 const int night = 21; //Початок ночі
-const int dayBrightness = 70; //Денна яскравість %
-const int nightBrightness = 20; //Нічна яскравість %
+const int dayBrightness = 50; //Денна яскравість %
+const int nightBrightness = 10; //Нічна яскравість %
 const long  gmtOffset_sec = 7200;
 
 
@@ -67,7 +74,7 @@ int arrAlarms = sizeof(ledColor) / sizeof(int);
 // bool startMessage = false;
 bool enable = false;
 int currencyMode = 1;
-int period = 15000;
+int period = 8000;
 
 const long dateInterval = 200000;
 unsigned long lastTime, previousMillisA = 0, previousMillisB = 0, previousMillisC = 0, previousMillisD = 0, previousMillisE = 0, previousMillisG = 0, previousMillisH = 0, lastWeatherTime = 0, startTime = 0, previousMillisAutoSwitchDisplay = 0;
