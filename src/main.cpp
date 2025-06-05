@@ -29,7 +29,7 @@ char APPassword[] = ""; //Пароль від точки доступу
 int brightness = 10; //Яскравість %
 bool autoBrightness = true; //Ввімкнена/вимкнена авто яскравість
 
-#define BOTtoken "6048625903:AAEe-Sr6wOnMzcp-LaLQxU9FwALzpDqhpIU"
+#define BOTtoken "6048625903:AAFT5UpN7-1TJxXWX8-UCJ7C5tMXiK47mQU"
 #define CHAT_ID "260761974"
 int botRequestDelay = 1000;
 
@@ -310,18 +310,18 @@ void printLocalTime(struct tm timeinfo)
   int* hour_a = getSeparateDigits(timeinfo.tm_hour);
 
 
-  Serial.print("Hour1:");
-  Serial.println(std::to_string(hour_a[0]).c_str());
+  //Serial.print("Hour1:");
+  //Serial.println(std::to_string(hour_a[0]).c_str());
 
-  Serial.print("Hour2:");
-  Serial.println(std::to_string(hour_a[1]).c_str());
+  //Serial.print("Hour2:");
+  //Serial.println(std::to_string(hour_a[1]).c_str());
 
   int* minutes_a = getSeparateDigits(timeinfo.tm_min);
-  Serial.print("Minute1:");
-  Serial.println(std::to_string(minutes_a[0]).c_str());
+  //Serial.print("Minute1:");
+  //Serial.println(std::to_string(minutes_a[0]).c_str());
 
-  Serial.print("Minute2:");
-  Serial.println(std::to_string(minutes_a[1]).c_str());
+  //Serial.print("Minute2:");
+  //Serial.println(std::to_string(minutes_a[1]).c_str());
 }
 
 
