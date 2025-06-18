@@ -221,7 +221,7 @@ void Led9x3Matrix::begin()
     _strip->begin();           // INITIALIZE NeoPixel strip object (REQUIRED)
     _strip->show();            // Turn OFF all pixels ASAP
     _strip->setBrightness(brightness_led * 2.55);
-    //displayStaticPrapor(10);
+    
     wifiIconDraw('x');
 }
 

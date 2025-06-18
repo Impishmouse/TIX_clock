@@ -1,7 +1,6 @@
 /*
 
-Робочий приклад  TIX CLOCK 
-
+Робочий приклад  TIX CLOCK version 1.1.0
 
 */
 
@@ -13,14 +12,13 @@
 #include <WiFi.h> //для зв'язку
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
-#include <UniversalTelegramBot.h> //Telegram бот
 #include <WiFiManager.h> //Керування WiFi
 #include <NTPClient.h> //Час
 #include <HTTPUpdate.h> //Оновлення прошивки через тг бота
 #include <Wire.h> 
 #include "time.h"
 #include <string> 
-
+#include <TixClockManager.h>
 
 // ============ НАЛАШТУВАННЯ ============
 char ssid[] = "StarLord_02";                  //"StarLord"; //Назва твоєї мережі WiFi
@@ -29,14 +27,11 @@ char password[] = "strongWifiPwd";              //"strongWifipwd"; //Парол�
 char APSsid[] = "TixClock"; //Назва точки доступу
 char APPassword[] = ""; //Пароль від точки доступу
 
-#define BOTtoken "6048625903:AAFT5UpN7-1TJxXWX8-UCJ7C5tMXiK47mQU"
-#define CHAT_ID "260761974"
-int botRequestDelay = 1000;
 
-int brightness = 10; //Яскравість %
+int brightness = 2; //Яскравість %
 bool autoBrightness = true; //Ввімкнена/вимкнена авто яскравість
-const int dayBrightness = 50; //Денна яскравість %
-const int nightBrightness = 10; //Нічна яскравість %
+const int dayBrightness = 10; //Денна яскравість %
+const int nightBrightness = 1; //Нічна яскравість %
 
 const int day = 9; //Початок дня
 const int night = 21; //Початок ночі
@@ -50,6 +45,7 @@ const long  gmtOffset_sec = 7200;
 
 Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 Led9x3Matrix ledDisplay(&strip);
+TixClockManager tixManager(&strip);
 
 DynamicJsonDocument doc(30000);
 
@@ -60,15 +56,12 @@ WiFiUDP ntpUDP;
 const char* ntpServer = "ua.pool.ntp.org";
 
 NTPClient timeClient(ntpUDP, ntpServer, 7200);
-UniversalTelegramBot bot(BOTtoken, client);
+
 
 void colorWipe(int wait);
-int linearSearch(int *arr, int arr_len, int target);
-void setLedGroupAndColor(int* legGroup, int legGroup_len, int* enableIndexes, int enabled_len, uint32_t ledColor);
 
-unsigned long lastTimeBotRan;
-unsigned long duration;
-static unsigned long times[25];
+
+
 String color;
 static int ledColor[25];
 
@@ -97,24 +90,13 @@ const int   daylightOffset_sec = 3600;
 static int ledColorBlue[] =   { 1, 3, 8, 9, 10, 13, 15, 20, 21, 22, 25};
 static int ledColorYellow[] = { 0, 4, 7, 6, 11, 12, 16, 17, 19, 23, 24};
 
-static int ledHour1[] = { 0, 1, 2};
-static int ledHour2[] = { 3, 4, 5, 6, 7, 8, 9, 10, 11};
 
-static int ledMin1[] = { 12, 13, 14, 15, 16, 17};
-static int ledMin2[] = { 18, 19, 20, 21, 22, 23, 24, 25, 26};
-
-const int ARRAY_SIZE = 9; // Розмір масиву - максимальна кількисть світлодіодів на одну цифру.
 
 
 void initWiFi() {
 
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
-
-  // TODO  Add led breath while wifi connection
-  
-  //airAlarmDisplay.wifiConnect(ssid, 2);
-  //delay(700);
   
   if (WiFi.status() != WL_CONNECTED)
   {
@@ -129,7 +111,7 @@ void initWiFi() {
     }
     else
     {
-	  // TODO add indication if connected			
+	    // TODO add indication if connected			
       Serial.println("Підключено :)");
     }
   }
@@ -140,6 +122,17 @@ void initStrip() {
   strip.show();            // Turn OFF all pixels ASAP
   strip.setBrightness(brightness * 2.55);
   colorWipe(60);
+}
+
+// Засвітка світлодіодів у вигляді прапора
+void colorWipe(int wait) {
+  int count = sizeof(ledColorYellow) / sizeof(int);
+  for (int i = 0; i < count; i++) { // For each pixel in strip...
+    strip.setPixelColor(ledColorBlue[i], strip.Color(0, 0, 255));
+    strip.setPixelColor(ledColorYellow[i], strip.Color(255, 255, 0));//  Set pixel's color (in RAM)
+    strip.show();                          //  Update strip to match
+    delay(wait);                           //  Pause for a moment
+  }
 }
 
 void initTime() {
@@ -166,188 +159,6 @@ void initTime() {
   }
 }
 
-// Засвітка світлодіодів у вигляді прапора
-void colorWipe(int wait) {
-  int count = sizeof(ledColorYellow) / sizeof(int);
-  for (int i = 0; i < count; i++) { // For each pixel in strip...
-    strip.setPixelColor(ledColorBlue[i], strip.Color(0, 0, 255));
-    strip.setPixelColor(ledColorYellow[i], strip.Color(255, 255, 0));//  Set pixel's color (in RAM)
-    strip.show();                          //  Update strip to match
-    delay(wait);                           //  Pause for a moment
-  }
-}
-
-// Відправка в телеграм повідомлення та клавіатури.
-void success(String message) {
-  String keyboardJson = "[[\"" + String(enabled ? "⏸💡" : "▶️💡") + "\"], [\"🔢 Змінити режим (" + String(mode == "clock" ? "🕒" : mode == "flag" ? "🇺🇦" : mode == "flashlight" ? "🔦" + String(color == "white" ? "⚪" : color == "red" ? "🔴" : color == "orange" ? "🟠" : color == "yellow" ? "🟡" : color == "green" ? "🟢" : color == "blue" ? "🔵" : color == "purple" ? "🟣" : "❌")  : "❌") + ")\"], [\"🔆 Змінити яскравість (" + String(autoBrightness ? "🤖": String(brightness) + "%") + ")\"], [\"🔧 Оновити прошивку\"], [\"🔄 Рестарт\"]]";
-  bot.sendMessageWithReplyKeyboard(CHAT_ID, message, "", keyboardJson, true);
-}
-
-// Handle what happens when you receive new messages
-void handleNewMessages(int numNewMessages) {
-  Serial.println("handleNewMessages");
-  Serial.println(String(numNewMessages));
-  for (int i=0; i<numNewMessages; i++) {
-    String chat_id = String(bot.messages[i].chat_id);
-    // Chat id of the requester
-    if (chat_id != CHAT_ID){
-      bot.sendMessage(chat_id, "Незареєстрований користувач");
-      continue;
-    }
-    String text = bot.messages[i].text;
-    Serial.println(text);
-    String from_name = bot.messages[i].from_name;
-    if (text == "/start") {
-      success("Привіт, " + from_name + ".\nДля керування використовуй кнопки в меню бота");  
-    }
-    if (text == String(enabled ? "⏸💡" : "▶️💡")) {
-      if (enabled) {
-         enabled = false;
-        success("⏸");
-      } else { 
-        enabled = true;
-        success("▶️");
-      }  
-    }
-
-    if (text == "🔆 Змінити яскравість (" + String(autoBrightness ? "🤖": String(brightness) + "%") + ")") {
-      // bot.sendMessage(chat_id, "Введи значення у відстотках:\n*Щоб активувати авто-яскравість введи значення 0");
-      String keyboardJson = "[[\"100%\", \"75%\", \"50%\", \"25%\", \"1%\"], [\"" + String(autoBrightness ? "" : "🤖 Активувати автояскравість") + "\"], [\"❌ Скасувати\"]]";
-      bot.sendMessageWithReplyKeyboard(chat_id, "🔆 Введи значення у відстотках:", "", keyboardJson, true);
-      while (true) {
-        int numNewMessages = bot.getUpdates(bot.last_message_received + 1);
-        if (numNewMessages > 0) {
-          String text = bot.messages[0].text;
-          if (text.toInt() >= 1 && text.toInt() <= 100) {
-            autoBrightness = false;
-            brightness = text.toInt();
-            strip.setBrightness(brightness * 2.55);
-            strip.show();
-            success("✅");
-            break;
-          } else if (text == "❌ Скасувати") {
-              success("✅");
-              break;
-            } else if (text == "🤖 Активувати автояскравість") {
-              autoBrightness = true;
-              success("🤖");
-              break;
-            } else {
-              bot.sendMessage(chat_id, "🔆 Значення введено неправильно, введи відсоток від 1 до 100:");
-              bot.sendMessage(chat_id, "🤷");
-            }
-        }
-        delay(1000);
-      }
-    }
-    
-    //
-    if (text == "🔢 Змінити режим (" + String(mode == "clock" ? "🕒" : mode == "flag" ? "🇺🇦" : mode == "flashlight" ? "🔦" + String(color == "white" ? "⚪" : color == "red" ? "🔴" : color == "orange" ? "🟠" : color == "yellow" ? "🟡" : color == "green" ? "🟢" : color == "blue" ? "🔵" : color == "purple" ? "🟣" : "❌")  : "❌") + ")") 
-    {
-      // bot.sendMessage(chat_id, "Введи значення у відстотках:\n*Щоб активувати авто-яскравість введи значення 0");
-      String keyboardJson = "[[\"" + String(mode == "flag" ? "" : "🇺🇦 Прапор") + "\"], [\"🔦 Ліхтарик\"], [\"" + String(mode == "clock" ? "": "🕒 Годинник") + "\"], [\"❌ Скасувати\"]]";
-      bot.sendMessageWithReplyKeyboard(chat_id, "🔢 Вибери режим:", "", keyboardJson, true);
-      while (true) {
-        int numNewMessages = bot.getUpdates(bot.last_message_received + 1);
-        if (numNewMessages > 0) {
-          String text = bot.messages[0].text;
-          if (text == "🕒 Годинник") {
-            mode = "clock";  
-            success("🕒");  
-            break;        
-          } else if (text == "🇺🇦 Прапор") {
-            mode = "flag";  
-            success("🇺🇦");    
-            break;  
-          } else if (text == "🔦 Ліхтарик") {
-            String colors = "[[\"⚪️ Білий\"], [\"🔴 Червоний\"], [\"🟠 Помаранчевий\"], [\"🟡 Жовтий\"], [\"🟢 Зелений\"], [\"🔵 Синій\"], [\"🟣 Фіолетовий\"], [\"❌ Скасувати\"]]";
-            bot.sendMessageWithReplyKeyboard(chat_id, "🔦 Вибери колір в меню:", "", colors, true);
-            while (true) {
-              int numNewMessages = bot.getUpdates(bot.last_message_received + 1);
-              if (numNewMessages > 0) {
-                String text = bot.messages[0].text;
-                if (text == "⚪️ Білий") {
-                  color = "white";
-                  mode = "flashlight"; 
-                  success("🔦⚪️");
-                  break;
-                } else if (text == "🔴 Червоний") {
-                  color = "red";
-                  mode = "flashlight";
-                  success("🔦🔴");
-                  break;
-                } else if (text == "🟠 Помаранчевий") {
-                  color = "orange";
-                  mode = "flashlight";
-                  success("🔦🟠");
-                  break;
-                } else if (text == "🟡 Жовтий") {
-                  color = "yellow";
-                  mode = "flashlight";
-                  success("🔦🟡");
-                  break;
-                } else if (text == "🟢 Зелений") {
-                  color = "green";
-                  mode = "flashlight";
-                  success("🔦🟢");
-                  break;
-                } else if(text == "🔵 Синій") {
-                  color = "blue";
-                  mode = "flashlight";
-                  success("🔦🔵");
-                  break;
-                } else if(text == "🟣 Фіолетовий") {
-                  color = "purple";
-                  mode = "flashlight";
-                  success("🔦🟣");
-                  break;
-                } else if (text == "❌ Скасувати") {
-                  success("✅");
-                  break;
-                } else {
-                  bot.sendMessage(chat_id, "🔦 Колір недоступний, вмбери колір в меню:");
-                  bot.sendMessage(chat_id, "🤷");
-                }
-              }
-            }
-            break;
-          } else if (text == "❌ Скасувати") {
-            success("✅");
-            break;
-          } else {
-            bot.sendMessage(chat_id, "🔢 Не зрозумілий режим, вмбери режим в меню:");
-            bot.sendMessage(chat_id, "🤷");
-          }
-        }
-        delay(1000);
-      }
-    }
-
-    if (text == "🔄 Рестарт") {
-      success("🔄");
-      numNewMessages = bot.getUpdates(bot.last_message_received + 1);
-      ESP.restart();
-    }
-  
-  }
-}
-
-
-int* getSeparateDigits (int input_digit)
-{
-  static int ret[2];
-
-  if (input_digit >= 10) {
-    ret[0] = input_digit / 10;   // Отримуємо десятки
-    ret[1] = input_digit % 10;   // Отримуємо одиниці
-  } else {
-    // Якщо число менше 10, десятки залишаються нульовими
-    ret[0] = 0;
-    ret[1] = input_digit;
-  }
-
-  return ret;
-}
 
 struct tm getLocalTime()
 {
@@ -362,87 +173,6 @@ struct tm getLocalTime()
   return timeinfo;
 }
 
-void printLocalTime(struct tm timeinfo)
-{
-  Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
-
-  int* hour_a = getSeparateDigits(timeinfo.tm_hour);
-  int* minutes_a = getSeparateDigits(timeinfo.tm_min);
-}
-
-
-// Генерація випадкових не повторювальних індексів масива. 
-// Потмім використається щоб засвітити світлодіоди
-// int led_Count - кількисть світлодіодів які треба засвітити - година або минута.
-// int range_min, int range_max - відповідно кількисть світлодіодів яки можна використати. - відповідає секциї
-int* getRandomLeds(int led_Count, int range_max)
-{
-  static int numbers[ARRAY_SIZE];  // Масив для зберігання випадкових чисел
-  bool used[ARRAY_SIZE];    // Масив для перевірки використаних чисел
-
-  // Ініціалізація масиву used
-  for (int i = 0; i < ARRAY_SIZE; i++) {
-    used[i] = false;
-  }
-
-  for (int i = 0; i < led_Count; i++) {
-    int num;
-    do {
-      num = random(0, range_max + 1);  // Генерація випадкового числа
-    } while (used[num]);  // Перевірка, чи число вже було використане
-
-    numbers[i] = num;
-    used[num] = true;
-    //Serial.println(numbers[i]);  // Виведення числа в серійний монітор
-  }
-  return numbers;
-}
-
-void showTixHour(int* hours_a)
-{
-  setLedGroupAndColor(ledHour1, 3, getRandomLeds(hours_a[0], 2), hours_a[0], strip.Color(255, 0, 0));
-  setLedGroupAndColor(ledHour2, 9, getRandomLeds(hours_a[1], 8), hours_a[1], strip.Color(0, 255, 0));
-}
-
-void showTixMinutes(int* mins_a)
-{
-  setLedGroupAndColor(ledMin1, 6, getRandomLeds(mins_a[0], 5), mins_a[0], strip.Color(0, 0, 255));
-  setLedGroupAndColor(ledMin2, 9, getRandomLeds(mins_a[1], 8), mins_a[1], strip.Color(255, 0, 0));
-}
-
-/*
-  Передамо в 
-  legGroup - масив з індексами світлодіодів для секції (десятки годин, одениці годин, ...)
-  legGroup_len - довжину цього масива.
-  enableIndexes - випадково вибрані індекси масива які треба засвітити.
-  enabled_len - довжина масива.
-  ledColor - кольор якім треба засвітити.
- */
-void setLedGroupAndColor (int* legGroup, int legGroup_len, int* enableIndexes, int enabled_len, uint32_t ledColor)
-{
-  for (int i = 0; i < legGroup_len; i++) { // For each pixel in strip...
-    if (linearSearch(enableIndexes, enabled_len, i) >= 0)
-    {
-      strip.setPixelColor(legGroup[i], ledColor);
-    } 
-    else 
-    {
-      strip.setPixelColor(legGroup[i], strip.Color(0, 0, 0));  // вимикаємо світлодіод
-    }
-  }
-}
-
-int linearSearch(int *arr, int arr_len, int target) 
-{
-    for (int i = 0; i < arr_len; i++) 
-    {
-      if (arr[i] == target)
-      {
-        return target; // Повертає індекс знайденого елемента
-      }
-    }
-    return -1;  // Повертає -1, якщо елемент не знайдено
-}
 
 void setup() 
 {
@@ -453,9 +183,6 @@ void setup()
   initWiFi();
 
   initTime();
-  
-  client.setCACert(TELEGRAM_CERTIFICATE_ROOT);
-  success("💡");
 
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
 }
@@ -463,16 +190,6 @@ void setup()
 void loop() {
   wifiConnected = WiFi.status() == WL_CONNECTED;
   if (wifiConnected) {
-    if (millis() > lastTimeBotRan + botRequestDelay) {
-      int numNewMessages = bot.getUpdates(bot.last_message_received + 1);
-
-      while (numNewMessages) {
-        Serial.println("got response");
-        handleNewMessages(numNewMessages);
-        numNewMessages = bot.getUpdates(bot.last_message_received + 1);
-      }
-      lastTimeBotRan = millis();
-    }
     if (enabled) {
 
       if (mode == "flag") 
@@ -510,13 +227,9 @@ void loop() {
         if (mode == "clock") 
         {
           struct tm timeInfo = getLocalTime();
-          printLocalTime(timeInfo);
+
+          tixManager.showtime(timeInfo);
           
-          int* hour_a = getSeparateDigits(timeInfo.tm_hour);
-          showTixHour(hour_a);
-          int* minutes_a = getSeparateDigits(timeInfo.tm_min);
-          showTixMinutes(minutes_a);
-          strip.show();  //  Update strip to match
           delay(60);                           //  Pause for a moment
 
         }
