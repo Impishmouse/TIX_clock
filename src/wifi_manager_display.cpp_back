@@ -1,0 +1,118 @@
+#include <WiFi.h>
+#include <Preferences.h>
+#include <WiFiManager.h>
+#include <Led9x3Matrix.h>
+
+#define LED_PIN 13
+#define LED_COUNT 27
+
+// WiFi-мережі
+const char* ssids[] = {"StarLord", "StarLord_02"};
+const char* passwords[] = {"strongWifipwd", "strongWifiPwd"};
+const int networkCount = sizeof(ssids) / sizeof(ssids[0]);
+
+char APSsid[] = "TixClock"; //Назва точки доступу
+char APPassword[] = ""; //Пароль від точки доступу
+
+Preferences preferences;
+
+Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
+Led9x3Matrix ledDisplay(&strip);
+
+static bool wifiConnected;
+
+void drawConnecting(const char* ssid, int index) {
+  // todo make indication
+  Serial.print("connect to:");
+  Serial.println(ssid);
+  ledDisplay.wifiConnecting(index + 1);
+}
+
+bool connectToSavedWiFi() {
+  for (int i = 0; i < networkCount; i++) {
+    drawConnecting(ssids[i], i);
+    WiFi.begin(ssids[i], passwords[i]);
+
+    unsigned long startAttemptTime = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 5000) {
+      delay(500);
+    }
+
+    if (WiFi.status() == WL_CONNECTED) {
+      preferences.putString("last_ssid", ssids[i]);
+      return true;
+    }
+  }
+  return false;
+}
+
+void enterAPMode() {
+  WiFiManager wm;
+  wm.setConfigPortalTimeout(180); // 3 хвилини на налаштування
+  // TODO indicate Access point mode
+  Serial.println("Enter to Access point mode");
+  ledDisplay.wifiAccessPoint();
+
+  if (!wm.autoConnect(APSsid, APPassword))
+  {
+    Serial.println("Restart ESP");
+    ESP.restart();
+  }
+
+  // Зберегти нову мережу
+  preferences.putString("last_ssid", WiFi.SSID().c_str());
+  preferences.putString("last_pass", WiFi.psk().c_str());
+}
+
+void forceAPMode() {
+  preferences.clear(); // видаляє збережені дані
+  enterAPMode();
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  // Start led matrix here
+  ledDisplay.begin();
+
+  preferences.begin("wifi", false);
+
+  String last_ssid = preferences.getString("last_ssid", "");
+  String last_pass = preferences.getString("last_pass", "");
+
+  if (last_ssid != "") {
+    drawConnecting(last_ssid.c_str(), 0);
+    WiFi.begin(last_ssid.c_str(), last_pass.c_str());
+    unsigned long startTime = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - startTime < 5000) {
+      delay(500);
+      Serial.println("not connected to wifi");
+      ledDisplay.wifiConnectProblem();
+    }
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.println("Success connected to wifi 0");
+      ledDisplay.wifiConnectSuccess();
+      return;
+    }
+  }
+
+  // Перехід в стан точки доступу.
+  if (!connectToSavedWiFi()) {
+    enterAPMode();
+  } else {
+    Serial.println("Success connected to wifi 1");
+    ledDisplay.wifiConnectSuccess();
+  }
+}
+
+void loop() {
+  wifiConnected = WiFi.status() == WL_CONNECTED;
+  if (wifiConnected) {
+    ledDisplay.breathAnimation(255, 92, 73);
+  } else {
+    strip.clear();
+    strip.show();
+    delay(10000);
+    ESP.restart();
+  }
+}

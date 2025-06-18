@@ -9,7 +9,6 @@
 
 #include <ArduinoJson.h> //json для аналізу інформації
 #include <Adafruit_NeoPixel.h> //neopixel для управління стрічкою
-#include <Led9x3Matrix.h> // Для показу еффектів.
 #include <WiFi.h> //для зв'язку
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
@@ -49,7 +48,6 @@ const long  gmtOffset_sec = 7200;
 
 
 Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
-Led9x3Matrix ledDisplay(&strip);
 
 DynamicJsonDocument doc(30000);
 
@@ -241,94 +239,35 @@ void handleNewMessages(int numNewMessages) {
       }
     }
     
-    //
-    if (text == "🔢 Змінити режим (" + String(mode == "clock" ? "🕒" : mode == "flag" ? "🇺🇦" : mode == "flashlight" ? "🔦" + String(color == "white" ? "⚪" : color == "red" ? "🔴" : color == "orange" ? "🟠" : color == "yellow" ? "🟡" : color == "green" ? "🟢" : color == "blue" ? "🔵" : color == "purple" ? "🟣" : "❌")  : "❌") + ")") 
-    {
-      // bot.sendMessage(chat_id, "Введи значення у відстотках:\n*Щоб активувати авто-яскравість введи значення 0");
-      String keyboardJson = "[[\"" + String(mode == "flag" ? "" : "🇺🇦 Прапор") + "\"], [\"🔦 Ліхтарик\"], [\"" + String(mode == "clock" ? "": "🕒 Годинник") + "\"], [\"❌ Скасувати\"]]";
-      bot.sendMessageWithReplyKeyboard(chat_id, "🔢 Вибери режим:", "", keyboardJson, true);
-      while (true) {
-        int numNewMessages = bot.getUpdates(bot.last_message_received + 1);
-        if (numNewMessages > 0) {
-          String text = bot.messages[0].text;
-          if (text == "🕒 Годинник") {
-            mode = "clock";  
-            success("🕒");  
-            break;        
-          } else if (text == "🇺🇦 Прапор") {
-            mode = "flag";  
-            success("🇺🇦");    
-            break;  
-          } else if (text == "🔦 Ліхтарик") {
-            String colors = "[[\"⚪️ Білий\"], [\"🔴 Червоний\"], [\"🟠 Помаранчевий\"], [\"🟡 Жовтий\"], [\"🟢 Зелений\"], [\"🔵 Синій\"], [\"🟣 Фіолетовий\"], [\"❌ Скасувати\"]]";
-            bot.sendMessageWithReplyKeyboard(chat_id, "🔦 Вибери колір в меню:", "", colors, true);
-            while (true) {
-              int numNewMessages = bot.getUpdates(bot.last_message_received + 1);
-              if (numNewMessages > 0) {
-                String text = bot.messages[0].text;
-                if (text == "⚪️ Білий") {
-                  color = "white";
-                  mode = "flashlight"; 
-                  success("🔦⚪️");
-                  break;
-                } else if (text == "🔴 Червоний") {
-                  color = "red";
-                  mode = "flashlight";
-                  success("🔦🔴");
-                  break;
-                } else if (text == "🟠 Помаранчевий") {
-                  color = "orange";
-                  mode = "flashlight";
-                  success("🔦🟠");
-                  break;
-                } else if (text == "🟡 Жовтий") {
-                  color = "yellow";
-                  mode = "flashlight";
-                  success("🔦🟡");
-                  break;
-                } else if (text == "🟢 Зелений") {
-                  color = "green";
-                  mode = "flashlight";
-                  success("🔦🟢");
-                  break;
-                } else if(text == "🔵 Синій") {
-                  color = "blue";
-                  mode = "flashlight";
-                  success("🔦🔵");
-                  break;
-                } else if(text == "🟣 Фіолетовий") {
-                  color = "purple";
-                  mode = "flashlight";
-                  success("🔦🟣");
-                  break;
-                } else if (text == "❌ Скасувати") {
-                  success("✅");
-                  break;
-                } else {
-                  bot.sendMessage(chat_id, "🔦 Колір недоступний, вмбери колір в меню:");
-                  bot.sendMessage(chat_id, "🤷");
-                }
-              }
-            }
-            break;
-          } else if (text == "❌ Скасувати") {
-            success("✅");
-            break;
-          } else {
-            bot.sendMessage(chat_id, "🔢 Не зрозумілий режим, вмбери режим в меню:");
-            bot.sendMessage(chat_id, "🤷");
-          }
-        }
-        delay(1000);
-      }
+    if (text == "🔧 Оновити прошивку") {
+      success("🔧 Щоб оновити прошивку відправ файл у форматі .bin");
     }
-
     if (text == "🔄 Рестарт") {
       success("🔄");
       numNewMessages = bot.getUpdates(bot.last_message_received + 1);
       ESP.restart();
     }
-  
+
+	//	
+    if (bot.messages[i].hasDocument) {
+      httpUpdate.rebootOnUpdate(false);
+      t_httpUpdate_return ret = (t_httpUpdate_return)3;
+      bot.sendMessage(chat_id, "🔧 Завантаження прошивки...", "");
+      ret = httpUpdate.update(client, bot.messages[i].file_path);
+      switch (ret) {
+        case HTTP_UPDATE_FAILED:
+          bot.sendMessage(chat_id, "❌ " + String(httpUpdate.getLastError()) + ": " + httpUpdate.getLastErrorString(), "");
+          // break;
+        case HTTP_UPDATE_NO_UPDATES:
+          bot.sendMessage(chat_id, "❌ Немає оновлень", "");
+          // break;
+        case HTTP_UPDATE_OK:
+          bot.sendMessage(chat_id, "✅ Оновлення успішне", "");
+          bot.sendMessage(chat_id, "🔄 Перезапуск...", "");
+          numNewMessages = bot.getUpdates(bot.last_message_received + 1);
+          ESP.restart();
+      }    
+    }
   }
 }
 
@@ -367,7 +306,20 @@ void printLocalTime(struct tm timeinfo)
   Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
 
   int* hour_a = getSeparateDigits(timeinfo.tm_hour);
+
+
+  //Serial.print("Hour1:");
+  //Serial.println(std::to_string(hour_a[0]).c_str());
+
+  //Serial.print("Hour2:");
+  //Serial.println(std::to_string(hour_a[1]).c_str());
+
   int* minutes_a = getSeparateDigits(timeinfo.tm_min);
+  //Serial.print("Minute1:");
+  //Serial.println(std::to_string(minutes_a[0]).c_str());
+
+  //Serial.print("Minute2:");
+  //Serial.println(std::to_string(minutes_a[1]).c_str());
 }
 
 
@@ -461,6 +413,7 @@ void setup()
 }
 
 void loop() {
+
   wifiConnected = WiFi.status() == WL_CONNECTED;
   if (wifiConnected) {
     if (millis() > lastTimeBotRan + botRequestDelay) {
@@ -474,23 +427,7 @@ void loop() {
       lastTimeBotRan = millis();
     }
     if (enabled) {
-
-      if (mode == "flag") 
-      {
-        ledDisplay.praporAnimation();
-      } 
-      else if (mode == "flashlight") 
-      {
-        if (color == "white") ledDisplay.breathAnimation(255, 255, 255);
-        if (color == "red") ledDisplay.breathAnimation(255, 0, 0);
-        if (color == "orange") ledDisplay.breathAnimation(255, 165, 0);
-        if (color == "yellow") ledDisplay.breathAnimation(255, 255, 0);
-        if (color == "green") ledDisplay.breathAnimation(0, 255, 0);
-        if (color == "blue") ledDisplay.breathAnimation(0, 0, 255);
-        if (color == "purple") ledDisplay.breathAnimation(128, 0, 128);
-      } 
-      else if ((millis() - lastTime > period ) && (mode == "clock")) 
-      {
+      if (millis() - lastTime > period ) {
         if (autoBrightness) {
 		      //авто яскравість
 		      timeClient.update();
@@ -502,10 +439,10 @@ void loop() {
         }
 
         
-        unsigned long  time_millis = millis();
+        unsigned long  t = millis();
         unsigned long hv = 180000;
-        lastTime = time_millis;
-   
+        lastTime = t;
+        
         
         if (mode == "clock") 
         {
@@ -520,6 +457,27 @@ void loop() {
           delay(60);                           //  Pause for a moment
 
         }
+
+        /*if (mode == "flag") {
+          int count = sizeof(ledColorYellow) / sizeof(int);
+          for (int i = 0; i < count; i++) { // For each pixel in strip...
+            strip.setPixelColor(ledColorBlue[i], strip.Color(0, 0, 255));
+            strip.setPixelColor(ledColorYellow[i], strip.Color(255, 255, 0));//  Set pixel's color (in RAM)
+            strip.show();
+          }
+        }
+        if (mode == "flashlight") {
+          for (int i = 0; i < LED_COUNT; i++) {
+            if (color == "white") strip.setPixelColor(i, 255, 255, 255);
+            if (color == "red") strip.setPixelColor(i, 255, 0, 0);
+            if (color == "orange") strip.setPixelColor(i, 255, 165, 0);
+            if (color == "yellow") strip.setPixelColor(i, 255, 255, 0);
+            if (color == "green") strip.setPixelColor(i, 0, 255, 0);
+            if (color == "blue") strip.setPixelColor(i, 0, 0, 255);
+            if (color == "purple") strip.setPixelColor(i, 128, 0, 128);
+          }
+          strip.show();
+        }*/
       }
     } else {
       strip.clear();
