@@ -158,30 +158,26 @@ void loop() {
       } 
       else if ((millis() - lastTime > period ) && (mode == "clock")) 
       {
+        struct tm timeInfo = getLocalTime();
+
         if (autoBrightness) {
 		      //авто яскравість
-		      // TODO переробити це під отримання локального часу. 
-		      /*int hour = timeClient.getHours();
-		      bool isDay = hour >= day && hour < night;
+          int hour = timeInfo.tm_hour;
+          bool isDay = hour >= day && hour < night;
 		      brightness = isDay ? dayBrightness : nightBrightness;
           strip.setBrightness(brightness * 2.55);
-          strip.show();*/
+          strip.show();
         }
 
         
         unsigned long  time_millis = millis();
         unsigned long hv = 180000;
         lastTime = time_millis;
-   
         
         if (mode == "clock") 
         {
-          struct tm timeInfo = getLocalTime();
-
           tixManager.showtime(timeInfo);
-          
           delay(60);                           //  Pause for a moment
-
         }
       }
     } else {
