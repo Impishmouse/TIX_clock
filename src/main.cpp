@@ -19,6 +19,34 @@
 #include "time.h"
 #include <string> 
 
+#include <BLEDevice.h>
+#include <BLEServer.h>
+#include <BLEUtils.h>
+#include <BLE2902.h>
+
+
+// ============ НАЛАШТУВАННЯ  BLUETOOTH ============
+
+BLECharacteristic* pCharacteristic;
+BLEServer* pServer;
+bool deviceConnected = false;
+
+#define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
+#define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+
+
+std::string dayTime = "08:00";
+std::string nightTime = "21:00";
+uint8_t selectedColor[3] = {255, 255, 255}; // RGB
+
+int currentMode = 1;
+/*  Опис режимів роботи : 
+  0 - вимкнено 
+  1 - годинник
+  2 - Дихання - підсвітка - зі зміною кольору.
+  3 - Режин анімації прапора.
+ */
+
 
 // ============ НАЛАШТУВАННЯ ============
 char ssid[] = "StarLord_02";                  //"StarLord"; //Назва твоєї мережі WiFi
@@ -33,8 +61,8 @@ int brightness = 2; //Яскравість %
 bool autoBrightness = true; //Ввімкнена/вимкнена авто яскравість
 const int dayBrightness = 10; //Денна яскравість %
 const int nightBrightness = 1; //Нічна яскравість %
-const int day = 9; //Початок дня
-const int night = 21; //Початок ночі
+int day = 9; //Початок дня
+int night = 21; //Початок ночі
 
 
 // ===== Налаштування світлодіодів ======
@@ -43,7 +71,7 @@ const int night = 21; //Початок ночі
 Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 Led9x3Matrix ledDisplay(&strip);
 TixClockManager tixManager(&strip);
-String color;
+
 static int ledColor[25];
 void colorWipe(int wait);
 
@@ -59,11 +87,6 @@ const long dateInterval = 200000;
 unsigned long lastTime;
 
 static bool wifiConnected;
-
-String mode = "clock"; //Режим
-
-bool enabled = true;
-// Перевірка останніх повідомлень
 
 const int   daylightOffset_sec = 3600;
 
@@ -125,10 +148,117 @@ struct tm getLocalTime()
   return timeinfo;
 }
 
+// Bluetooth callbacks 
+
+class MyCallbacks: public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic *pCharacteristic) {
+    std::string value = pCharacteristic->getValue();
+    Serial.print("📨 Received: ");
+    Serial.println(value.c_str());
+  
+    if (value.find("MODE:") == 0) {
+      currentMode = atoi(value.substr(5).c_str());
+      Serial.printf("➡️ Mode set to %d\n", currentMode);
+  
+    } else if (value.find("BRIGHT:") == 0) {
+      brightness = atoi(value.substr(7).c_str());
+      Serial.printf("💡 Brightness set to %d\n", brightness);
+  
+      strip.setBrightness(brightness);
+      strip.show();
+
+    } else if (value.find("AUTO:") == 0) {
+      bool autoB = value.substr(5) == "1";
+      autoBrightness = autoB;
+      Serial.printf("🌓 AutoBrightness: %s\n", autoB ? "ON" : "OFF");
+  
+    } else if (value.find("DAY:") == 0) {
+      dayTime = value.substr(4);  // expected format "HH:MM"
+      day = atoi(dayTime.substr(0, 2).c_str());
+      Serial.printf("🌞 Day time set to %s\n", dayTime.c_str());
+  
+    } else if (value.find("NIGHT:") == 0) {
+      nightTime = value.substr(6);
+      night = atoi(nightTime.substr(0, 2).c_str());
+      Serial.printf("🌙 Night time set to %s\n", nightTime.c_str());
+  
+    } else if (value.find("COLOR:") == 0) {
+      String hexColor = value.substr(6).c_str(); // "#RRGGBB"
+      long colorValue = strtol(hexColor.c_str() + 1, nullptr, 16); // Skip '#'
+      uint8_t r = (colorValue >> 16) & 0xFF;
+      uint8_t g = (colorValue >> 8) & 0xFF;
+      uint8_t b = colorValue & 0xFF;
+      selectedColor[0] = r;
+      selectedColor[1] = g;
+      selectedColor[2] = b;
+      Serial.printf("🎨 Color set to #%02X%02X%02X\n", r, g, b);
+  
+    } else if (value == "STATUS?") {
+      String status = "MODE:" + String(currentMode) + "\n" +
+                      "BRIGHT:" + String(brightness) + "\n" +
+                      "AUTO:" + String(autoBrightness ? 1 : 0) + "\n" +
+                      "DAY:" + String(dayTime.c_str()) + "\n" +
+                      "NIGHT:" + String(nightTime.c_str()) + "\n" +
+                      "COLOR:#" + String(selectedColor[0], HEX) + 
+                                String(selectedColor[1], HEX) + 
+                                String(selectedColor[2], HEX);
+      pCharacteristic->setValue(status.c_str());
+      pCharacteristic->notify();
+      Serial.println("📤 Sent full STATUS");
+      return;
+    }
+  
+    // Після будь-якої зміни — можна надіслати підтвердження, якщо потрібно
+  }
+};
+
+class MyServerCallbacks: public BLEServerCallbacks {
+  void onConnect(BLEServer* pServer) {
+    deviceConnected = true;
+    Serial.println("Connected");
+  }
+
+  void onDisconnect(BLEServer* pServer) {
+    deviceConnected = false;
+    Serial.println("⚠️ Device disconnected. Restarting advertising...");
+
+    // ❗️ Оновлення: перезапустити рекламу
+    BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
+    pAdvertising->start();
+  }
+};
+
 
 void setup() 
 {
   Serial.begin(115200);
+
+  Serial.println("BLE INIT...");
+  BLEDevice::init("ESP32_BLE");
+  Serial.println("BLE Device Initialized");
+
+  pServer = BLEDevice::createServer();
+  Serial.println("BLE Server Created");
+  pServer->setCallbacks(new MyServerCallbacks());
+
+  BLEService *pService = pServer->createService(SERVICE_UUID);
+  pCharacteristic = pService->createCharacteristic(
+    CHARACTERISTIC_UUID,
+    BLECharacteristic::PROPERTY_READ |
+    BLECharacteristic::PROPERTY_WRITE |
+    BLECharacteristic::PROPERTY_NOTIFY
+  );
+
+  pCharacteristic->setCallbacks(new MyCallbacks());
+  pCharacteristic->addDescriptor(new BLE2902());
+  pCharacteristic->setValue("ESP Ready");
+  Serial.println("ESP Ready");
+  pService->start();
+  
+  BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
+  pAdvertising->addServiceUUID(SERVICE_UUID);
+  pAdvertising->start();
+  Serial.println("✅ Advertising with service UUID");
 
   initStrip();
 
@@ -140,23 +270,17 @@ void setup()
 void loop() {
   wifiConnected = WiFi.status() == WL_CONNECTED;
   if (wifiConnected) {
-    if (enabled) {
+    if (currentMode != 0) {
 
-      if (mode == "flag") 
+      if (currentMode == 3) 
       {
         ledDisplay.praporAnimation();
       } 
-      else if (mode == "flashlight") 
+      else if (currentMode == 2) 
       {
-        if (color == "white") ledDisplay.breathAnimation(255, 255, 255);
-        if (color == "red") ledDisplay.breathAnimation(255, 0, 0);
-        if (color == "orange") ledDisplay.breathAnimation(255, 165, 0);
-        if (color == "yellow") ledDisplay.breathAnimation(255, 255, 0);
-        if (color == "green") ledDisplay.breathAnimation(0, 255, 0);
-        if (color == "blue") ledDisplay.breathAnimation(0, 0, 255);
-        if (color == "purple") ledDisplay.breathAnimation(128, 0, 128);
+        ledDisplay.breathAnimation(selectedColor[0], selectedColor[1], selectedColor[2]);
       } 
-      else if ((millis() - lastTime > period ) && (mode == "clock")) 
+      else if ((millis() - lastTime > period ) && (currentMode == 1)) 
       {
         struct tm timeInfo = getLocalTime();
 
@@ -174,7 +298,7 @@ void loop() {
         unsigned long hv = 180000;
         lastTime = time_millis;
         
-        if (mode == "clock") 
+        if (currentMode == 1) 
         {
           tixManager.showtime(timeInfo);
           delay(60);                           //  Pause for a moment
